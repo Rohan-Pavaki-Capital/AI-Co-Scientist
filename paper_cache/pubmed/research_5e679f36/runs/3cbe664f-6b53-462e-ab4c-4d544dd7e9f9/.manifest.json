@@ -1,0 +1,15 @@
+{
+  "run_id": "3cbe664f-6b53-462e-ab4c-4d544dd7e9f9",
+  "paper_ids": [
+    "41117970",
+    "42006054",
+    "39312351"
+  ],
+  "pmc_ids": [
+    "13084153",
+    "13084390",
+    "11419496"
+  ],
+  "query": "clinical indicators AND diagnostic outcomes AND (syndrome OR condition OR disorder) AND (terminology OR nomenclature)",
+  "timestamp": 1778351048.2522655
+}

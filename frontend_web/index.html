@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Open Coscientist - Workflow Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient"></div>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Open Coscientist</p>
+      <h1>Hypothesis Workflow Console</h1>
+      <p class="subhead">Run the multi-agent pipeline and watch each step publish its output in real time.</p>
+    </div>
+    <div class="hero-status">
+      <span class="pill" id="statusPill">Idle</span>
+      <span class="pill ghost" id="modePill">Demo mode</span>
+    </div>
+  </header>
+  <main class="layout">
+    <section class="panel config">
+      <form id="runForm" class="card form-card">
+        <div class="card-header">
+          <h2>Run settings</h2>
+          <p>Keep it simple. Start with a clear research goal.</p>
+        </div>
+        <div class="field">
+          <label for="researchGoal">Research goal</label>
+          <textarea id="researchGoal" rows="6" placeholder="Example: Identify early biomarkers for Parkinsons disease using multi-omics and imaging signals."></textarea>
+          <div class="hint" id="goalCount">0 characters</div>
+        </div>
+        <div class="field">
+          <label for="citedPapers">Cited papers (optional, one per line)</label>
+          <textarea id="citedPapers" rows="4" placeholder="Smith 2024 - Title - DOI or URL"></textarea>
+          <div class="hint">Passed into the workflow as user-provided literature context.</div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="maxIterations">Max iterations</label>
+            <input id="maxIterations" type="number" min="0" max="5" value="1" />
+            <div class="hint">Number of refinement cycles after the first ranking.</div>
+          </div>
+          <div class="field">
+            <label for="initialCount">Initial hypotheses</label>
+            <input id="initialCount" type="number" min="1" max="12" value="5" />
+            <div class="hint">How many starting hypotheses to generate before review.</div>
+          </div>
+          <div class="field">
+            <label for="evolutionCount">Evolution count</label>
+            <input id="evolutionCount" type="number" min="0" max="10" value="3" />
+            <div class="hint">Top hypotheses refined in each iteration.</div>
+          </div>
+          <div class="field">
+            <label for="modelName">Model name</label>
+            <input id="modelName" type="text" value="claude-haiku-4-5-20251001" />
+            <div class="hint">LiteLLM model identifier used for all calls.</div>
+          </div>
+        </div>
+        <div class="grid-2 toggle-grid">
+          <div class="toggle-field">
+            <label class="toggle">
+              <input id="enableLitReview" type="checkbox" checked />
+              <span>Enable literature review</span>
+            </label>
+            <div class="hint">Uses MCP tools to ground and reflect on literature.</div>
+          </div>
+          <div class="toggle-field">
+            <label class="toggle">
+              <input id="enableToolCalling" type="checkbox" />
+              <span>Enable tool calling generation</span>
+            </label>
+            <div class="hint">Lets the generate node call tools directly (needs MCP).</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="field">
+          <label for="runMode">Run mode</label>
+          <select id="runMode">
+            <option value="demo" selected>Demo data (no server required)</option>
+            <option value="api">Live server (SSE)</option>
+          </select>
+          <div class="hint">Demo uses sample data; Live runs the backend workflow.</div>
+        </div>
+        <div class="field" id="apiBaseField">
+          <label for="apiBase">API base URL</label>
+          <input id="apiBase" type="url" placeholder="http://localhost:8080" />
+          <div class="hint">Only used in Live mode to reach the FastAPI server.</div>
+        </div>
+        <div class="button-row">
+          <button class="primary" type="submit" id="runButton">Run workflow</button>
+          <button class="ghost" type="button" id="clearButton">Clear</button>
+        </div>
+      </form>
+    </section>
+    <section class="panel output">
+      <div class="card final-card">
+        <div class="card-header">
+          <h3>Final hypotheses</h3>
+          <span class="chip" id="finalCount">0</span>
+        </div>
+        <div id="finalList" class="final-list">
+          <div class="final-empty">No final hypotheses yet.</div>
+        </div>
+      </div>
+      <div class="card status-card">
+        <div>
+          <h2>Run status</h2>
+          <p id="statusText">Waiting for a run.</p>
+        </div>
+        <div class="progress">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+      </div>
+      <div class="card logs-card">
+        <div class="card-header">
+          <h3>Process log</h3>
+          <span class="chip" id="logCount">0</span>
+        </div>
+        <div id="logList" class="log-list">
+          <div class="log-empty">Logs will appear here once a run starts.</div>
+        </div>
+      </div>
+      <div class="card steps-card">
+        <div class="card-header">
+          <h3>Workflow steps</h3>
+          <span class="chip" id="stepCount">0 of 0 complete</span>
+        </div>
+        <div id="stepsList" class="steps-list"></div>
+      </div>
+    </section>
+  </main>
+  <script src="app.js" defer></script>
+</body>
+</html>

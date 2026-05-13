@@ -1,0 +1,17 @@
+langgraph~=1.0.6
+langchain-core~=1.2.7
+langchain-mcp-adapters>=0.2.1
+langsmith~=0.6.2
+litellm~=1.80.16
+typing-extensions~=4.15.0
+rich~=14.2.0
+jsonschema~=4.26.0
+pyyaml>=6.0
+fastmcp~=2.14.3
+fastapi~=0.128.0
+httpx~=0.28.1
+beautifulsoup4~=4.14.3
+lxml~=6.0.2
+biopython~=1.86
+python-dotenv~=1.2.1
+uvicorn~=0.40.0
