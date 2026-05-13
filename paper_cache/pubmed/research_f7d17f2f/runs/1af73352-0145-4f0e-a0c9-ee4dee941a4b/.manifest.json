@@ -1,0 +1,15 @@
+{
+  "run_id": "1af73352-0145-4f0e-a0c9-ee4dee941a4b",
+  "paper_ids": [
+    "35503716",
+    "41705916",
+    "41798958"
+  ],
+  "pmc_ids": [
+    "13128661",
+    "13075620",
+    "12964370"
+  ],
+  "query": "We want to develop a patient-centered terminology operationalization system that integrates natural language processing of patient narratives with expert clinical definitions to identify which symptom",
+  "timestamp": 1778433758.9060233
+}
