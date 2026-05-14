@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: frontend-web
+    env: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn frontend_web.server:app --host 0.0.0.0 --port $PORT
+
+  - type: web
+    name: mcp-server
+    env: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn mcp_server.server:app --host 0.0.0.0 --port $PORT
+
+# Optional: If you want to deploy the Streamlit UI (`frontend/app.py`) separately,
+# create another service with startCommand:
+#   startCommand: streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0
