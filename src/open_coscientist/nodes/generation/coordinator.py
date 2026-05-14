@@ -8,6 +8,7 @@ When no literature is available, literature_grounding contains an explicit warni
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -48,6 +49,32 @@ class GenerationResults:
 
 
 # helper functions
+
+
+def _get_tools_generation_timeout_seconds() -> float:
+    """
+    Timeout guard for tool-based generation branch.
+
+    This prevents a single slow/hanging tool-call pipeline from blocking the
+    entire generation node when debate generation has already completed.
+    """
+    default_seconds = 420.0  # 7 minutes
+    raw = os.getenv("COSCIENTIST_TOOLS_GENERATION_TIMEOUT_SECONDS")
+    if not raw:
+        return default_seconds
+
+    try:
+        parsed = float(raw)
+        if parsed <= 0:
+            raise ValueError("must be > 0")
+        return parsed
+    except ValueError:
+        logger.warning(
+            "Invalid COSCIENTIST_TOOLS_GENERATION_TIMEOUT_SECONDS='%s'; using default %.0fs",
+            raw,
+            default_seconds,
+        )
+        return default_seconds
 
 def _check_literature_availability(
     articles_with_reasoning: Optional[str],
@@ -199,7 +226,12 @@ async def _execute_generation_tasks(
 
     if counts.tools_count > 0:
         logger.info(f"Running tool-based generation for {counts.tools_count} hypotheses")
-        tasks.append(("tools", generate_with_tools(state, counts.tools_count, reference_index)))
+        tools_timeout = _get_tools_generation_timeout_seconds()
+        logger.info(f"Tool-based generation timeout guard: {tools_timeout:.0f}s")
+        tools_task = asyncio.wait_for(
+            generate_with_tools(state, counts.tools_count, reference_index), timeout=tools_timeout
+        )
+        tasks.append(("tools", tools_task))
 
     if counts.debate_with_lit_count > 0:
         logger.info(f"Running debate-with-literature for {counts.debate_with_lit_count} hypotheses")
@@ -229,19 +261,52 @@ async def _execute_generation_tasks(
             )
         )
 
-    # run all tasks in parallel
-    results = await asyncio.gather(*[task for _, task in tasks])
+    # run all tasks in parallel, allowing partial success if one branch fails
+    results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
 
     # unpack results
     for i, (task_type, _) in enumerate(tasks):
+        task_result = results[i]
+
+        if isinstance(task_result, Exception):
+            logger.warning(
+                "Generation task '%s' failed (%s): %s",
+                task_type,
+                type(task_result).__name__,
+                task_result,
+            )
+            if task_type == "tools":
+                # Continue with debate outputs when tool-based path fails/times out.
+                # If this run was tools-only, fallback to debate-with-literature so
+                # the user still receives hypotheses.
+                if counts.debate_with_lit_count == 0 and counts.debate_only_count == 0:
+                    logger.warning(
+                        "Tool-based generation was the only path and failed; falling back to debate generation"
+                    )
+                    fallback_hypotheses, fallback_transcripts = await generate_with_debate(
+                        state=state,
+                        count=counts.tools_count,
+                        articles_with_reasoning=articles_with_reasoning,
+                        reference_index=reference_index,
+                    )
+                    debate_with_lit_hypotheses = fallback_hypotheses
+                    debate_transcripts.extend(fallback_transcripts)
+                continue
+
+            # Non-tools branch failed; continue so any successful branches can be returned.
+            continue
+
         if task_type == "tools":
-            tools_hypotheses = results[i]
+            tools_hypotheses = task_result
         elif task_type == "debate_lit":
-            debate_with_lit_hypotheses, transcripts = results[i]
+            debate_with_lit_hypotheses, transcripts = task_result
             debate_transcripts.extend(transcripts)
         elif task_type == "debate_only":
-            debate_only_hypotheses, transcripts = results[i]
+            debate_only_hypotheses, transcripts = task_result
             debate_transcripts.extend(transcripts)
+
+    if not tools_hypotheses and not debate_with_lit_hypotheses and not debate_only_hypotheses:
+        raise RuntimeError("All generation branches failed; no hypotheses were produced")
 
     return GenerationResults(
         tools_hypotheses=tools_hypotheses,
