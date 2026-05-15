@@ -674,8 +674,8 @@ function formatSupervisorOutput(plan) {
 
 function formatLiteratureOutput(stateData) {
   const text = stateData.articles_with_reasoning;
-  if (!text) {
-    return "<div class=\"step-placeholder\">No literature review output yet.</div>";
+  if (!text || text === "__LIT_REVIEW_FAILED__") {
+    return wrapCopyBlock(`<div class="step-placeholder" style="color:#6b7280;font-style:italic;">No relevant most recent literature found. The workflow will continue with hypothesis generation based on the model's existing knowledge.</div>`);
   }
   return wrapCopyBlock(`<pre>${escapeHtml(text)}</pre>`);
 }

@@ -37,7 +37,7 @@ GENERATION_SCHEMA: Dict[str, Any] = {
                             "description": "Concrete experiment design with models, datasets, metrics, and validation criteria (4-6 sentences)",
                         },
                     },
-                    "required": ["hypothesis", "explanation", "literature_grounding", "experiment"],
+                    "required": ["hypothesis", "explanation", "experiment"],
                     "additionalProperties": False,
                 },
             }

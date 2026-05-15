@@ -53,7 +53,7 @@ COMPARATIVE_BATCH_THRESHOLD = 5
 """Maximum hypotheses for comparative batch review. Above this, use parallel individual reviews."""
 
 # Concurrency limits
-MAX_CONCURRENT_LLM_CALLS = 5
+MAX_CONCURRENT_LLM_CALLS = 8
 """Maximum concurrent LLM API calls to avoid rate limits."""
 
 # Workflow defaults
@@ -64,10 +64,10 @@ DEFAULT_MAX_ITERATIONS = 1
 DEBATE_MIN_TURNS = 3
 """Minimum number of debate turns before generating final hypotheses."""
 
-DEBATE_MAX_TURNS = 5
+DEBATE_MAX_TURNS = 3
 """Default number of debate turns (can be up to 10)."""
 
-DEFAULT_INITIAL_HYPOTHESES_COUNT = 5
+DEFAULT_INITIAL_HYPOTHESES_COUNT = 3
 """Default number of initial hypotheses to generate."""
 
 DEFAULT_EVOLUTION_MAX_COUNT = 3
@@ -103,7 +103,7 @@ DEFAULT_CACHE_DIR = ".coscientist_cache"
 DEFAULT_CACHE_ENABLED = True
 """Whether caching is enabled by default (controls both LLM and node-level caching)."""
 
-LITERATURE_REVIEW_PAPERS_COUNT = 10
+LITERATURE_REVIEW_PAPERS_COUNT = 6
 """number of papers to collect from MCP servers/tools (configurable via env var)"""
 
 LITERATURE_REVIEW_PAPERS_COUNT_DEV = 4

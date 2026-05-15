@@ -90,7 +90,10 @@ class PubmedSource(DocumentSource):
         return self.qualified_path
 
     def entrez_read(self, handle) -> dict:
-        sleep(0.25) # rate limits - recommended by entrez docs
+        # Without an API key NCBI allows 3 req/s; with a key, 10 req/s.
+        # Use a longer sleep when no key is configured to avoid 429 errors.
+        delay = 0.15 if Entrez.api_key else 0.5
+        sleep(delay)
         results = Entrez.read(handle)
         handle.close()
         return results # type: ignore
@@ -120,6 +123,22 @@ class PubmedSource(DocumentSource):
         results = self.entrez_read(Entrez.esearch(**search_params))
         if (id_list := results.get("IdList", None)):
             return id_list
+
+        # Fallback: if query has more than 3 terms and returned 0 results,
+        # retry with a simplified query (first 3 terms only).  PubMed ANDs
+        # all terms, so long queries are often too restrictive.
+        terms = query.strip().split()
+        if len(terms) > 3:
+            simplified = " ".join(terms[:3])
+            logger.warning(
+                f"No results for query ({len(terms)} terms): {query}  →  retrying with simplified query: {simplified}"
+            )
+            search_params["term"] = simplified
+            results = self.entrez_read(Entrez.esearch(**search_params))
+            if (id_list := results.get("IdList", None)):
+                logger.info(f"Simplified query returned {len(id_list)} results")
+                return id_list
+
         logger.warning(f"No results found for query: {query}")
         return []
 
@@ -165,12 +184,25 @@ class PubmedSource(DocumentSource):
 
                 return contents
 
-            # download fulltext
+            # download fulltext with retry on 429 rate-limit errors
+            from urllib.error import HTTPError as _HTTPError
+            max_retries = 3
             text = []
             cursor = 0
             while True:
-                response = Entrez.efetch(db="pmc", id=pmc_id, retstart=cursor, rettype="xml")
-                sleep(0.25)
+                for attempt in range(max_retries):
+                    try:
+                        response = Entrez.efetch(db="pmc", id=pmc_id, retstart=cursor, rettype="xml")
+                        break
+                    except _HTTPError as http_err:
+                        if http_err.code == 429 and attempt < max_retries - 1:
+                            backoff = 2 ** (attempt + 1)  # 2s, 4s
+                            logger.warning(f"Rate limited (429) fetching {pmc_id}, retrying in {backoff}s...")
+                            sleep(backoff)
+                        else:
+                            raise
+                delay = 0.15 if Entrez.api_key else 0.5
+                sleep(delay)
                 body = cast(bytes, response.read()).decode('utf-8')
                 text.append(body)
                 if "[truncated]" in response or "Result too long" in body:
@@ -227,9 +259,10 @@ class PubmedSource(DocumentSource):
         """
         import asyncio
 
-        # request 3x papers to account for ~33% fulltext availability
-        # we'll filter down to max_papers with fulltext
-        search_buffer = max_papers * 3
+        # request 2x papers to account for ~50% fulltext availability.
+        # Lower multiplier = fewer metadata fetches = faster + fewer 429 errors.
+        # Shared pool supplementation covers any shortfall.
+        search_buffer = max_papers * 2
         logger.info(f"Requesting {search_buffer} papers from PubMed to find {max_papers} with fulltext")
         paper_ids = self.pubmed_search_ids(query, retmax=search_buffer, recency_years=recency_years)
 
@@ -377,7 +410,21 @@ class PubmedSource(DocumentSource):
             logger.warning(f"Short of target by {fulltext_shortfall} papers - will attempt shared pool supplement")
 
         if len(papers_to_use) == 0:
-            logger.error("No papers have PMC fulltexts - (no documents to analyze)")
+            # Fallback: use papers with abstracts when no PMC fulltexts available
+            papers_with_abstract = [
+                paper_id for paper_id in all_details
+                if all_details[paper_id].get('abstract')
+            ]
+            if papers_with_abstract:
+                papers_to_use = papers_with_abstract[:max_papers]
+                logger.info(
+                    f"No PMC fulltexts available - falling back to {len(papers_to_use)} papers with abstracts"
+                )
+                # Mark these papers so downstream knows they're abstract-only
+                for pid in papers_to_use:
+                    all_details[pid]['_abstract_only'] = True
+            else:
+                logger.error("No papers have PMC fulltexts or abstracts - (no documents to analyze)")
 
         # download fulltexts in parallel (synchronous calls wrapped in executor)
         async def download_fulltext(paper_id: str) -> None:

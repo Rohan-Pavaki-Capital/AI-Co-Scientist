@@ -301,7 +301,25 @@ def attempt_json_repair(
         result = json.loads(json_str)
         if isinstance(result, dict):
             return result, False
+        # LLM returned a bare array instead of a wrapped object.
+        # Auto-wrap it: [{...}] -> {"hypotheses": [{...}]}
+        if isinstance(result, list) and all(isinstance(item, dict) for item in result):
+            logger.debug("Auto-wrapping bare JSON array into {'hypotheses': [...]}")
+            return {"hypotheses": result}, False
     except json.JSONDecodeError:
+        # Quick fix: LLM often escapes single quotes as \' which is invalid JSON
+        if "\\'" in json_str:
+            try:
+                fixed = json_str.replace("\\'", "'")
+                result = json.loads(fixed)
+                if isinstance(result, dict):
+                    logger.debug("Fixed invalid \\' escapes in JSON")
+                    return result, False
+                if isinstance(result, list) and all(isinstance(item, dict) for item in result):
+                    logger.debug("Fixed invalid \\' escapes and auto-wrapped bare array")
+                    return {"hypotheses": result}, False
+            except json.JSONDecodeError:
+                pass
         # JSON is malformed, proceed with repair strategies
         pass
 
@@ -359,8 +377,12 @@ def attempt_json_repair(
 
     # Minor repairs (safe, don't indicate truncation)
     minor_repairs = [
+        # Fix escaped single quotes (common Claude issue)
+        lambda s: json.loads(s.replace("\\'", "'")),
         # Remove trailing commas before closing braces/brackets
         lambda s: json.loads(re.sub(r",(\s*[}\]])", r"\1", s)),
+        # Fix escaped single quotes AND remove trailing commas
+        lambda s: json.loads(re.sub(r",(\s*[}\]])", r"\1", s.replace("\\'", "'"))),
     ]
 
     # Major repairs (indicate truncation/incomplete, only on final retry)
@@ -447,9 +469,9 @@ def _coerce_result_for_schema(
     """
     Coerce known alternate JSON shapes into schema-compatible structure.
 
-    Example handled:
-    - query-generation sometimes returns a top-level list of strings instead of
-      {"queries": [...]}.
+    Handles multiple failure modes:
+    1. Top-level list → wrap into expected object key (queries, hypotheses)
+    2. Dict with string values where arrays are expected → parse inner JSON strings
     """
     if json_schema is None:
         return result
@@ -458,15 +480,45 @@ def _coerce_result_for_schema(
     if not isinstance(actual_schema, dict):
         return result
 
-    if (
-        isinstance(result, list)
-        and actual_schema.get("type") == "object"
-        and isinstance(actual_schema.get("properties"), dict)
-        and "queries" in actual_schema["properties"]
-        and all(isinstance(item, str) for item in result)
-    ):
-        logger.info("Coerced top-level list response into {'queries': [...]} for schema compatibility")
-        return {"queries": result}
+    # Case 1: Top-level list → wrap into expected object key
+    if isinstance(result, list) and actual_schema.get("type") == "object":
+        properties = actual_schema.get("properties", {})
+        if isinstance(properties, dict):
+            # Find the array property to wrap into
+            for key, prop_schema in properties.items():
+                if isinstance(prop_schema, dict) and prop_schema.get("type") == "array":
+                    # Check if list items match expected type
+                    if key == "queries" and all(isinstance(item, str) for item in result):
+                        logger.info(f"Coerced top-level list into {{'{key}': [...]}} for schema compatibility")
+                        return {key: result}
+                    elif all(isinstance(item, dict) for item in result):
+                        logger.info(f"Coerced top-level list into {{'{key}': [...]}} for schema compatibility")
+                        return {key: result}
+
+    # Case 2: Dict with string values where arrays are expected (double-encoded JSON)
+    # e.g. {"hypotheses": "[{...}]\n"} instead of {"hypotheses": [{...}]}
+    if isinstance(result, dict) and actual_schema.get("type") == "object":
+        properties = actual_schema.get("properties", {})
+        if isinstance(properties, dict):
+            fixed = False
+            for key, prop_schema in properties.items():
+                if (
+                    isinstance(prop_schema, dict)
+                    and prop_schema.get("type") == "array"
+                    and key in result
+                    and isinstance(result[key], str)
+                ):
+                    # The value is a string but should be an array — try parsing it
+                    try:
+                        parsed_value = json.loads(result[key])
+                        if isinstance(parsed_value, list):
+                            logger.info(f"Coerced string-encoded array for key '{key}' into actual array")
+                            result[key] = parsed_value
+                            fixed = True
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            if fixed:
+                return result
 
     return result
 
@@ -798,6 +850,11 @@ async def call_llm_json(
                 response_text = response_text[json_start:json_end].strip()
 
             last_response_text = response_text
+
+            # ── Universal JSON sanitization (permanent fix for LLM quirks) ──
+            # Fix invalid escape sequences that Claude/Gemini produce
+            response_text = response_text.replace("\\'", "'")  # \' is not valid JSON
+            response_text = response_text.strip()  # remove trailing whitespace/newlines
 
             # Step 1: Try simple parse first
             result = None

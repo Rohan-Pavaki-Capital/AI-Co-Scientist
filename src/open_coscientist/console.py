@@ -249,10 +249,10 @@ class ConsoleReporter:
             if lit_review == LITERATURE_REVIEW_FAILED:
                 self.console.print(
                     Panel(
-                        "[bold red]Literature review failed![/bold red]\n\n"
-                        "The system will fall back to standard generation without literature context.",
-                        title="[red]Literature Review Failed[/red]",
-                        border_style="red",
+                        "[bold yellow]No relevant most recent literature found.[/bold yellow]\n\n"
+                        "The workflow will continue with hypothesis generation based on the model's existing knowledge.",
+                        title="[yellow]Literature Review[/yellow]",
+                        border_style="yellow",
                         expand=False,
                     )
                 )
