@@ -47,7 +47,7 @@ class RunRequest(BaseModel):
     research_goal: str = Field(..., min_length=1)
     model_name: str = Field("claude-haiku-4-5-20251001")
     max_iterations: int = Field(1, ge=0, le=5)
-    initial_hypotheses_count: int = Field(5, ge=1, le=12)
+    initial_hypotheses_count: int = Field(3, ge=1, le=12)
     evolution_max_count: int = Field(3, ge=0, le=10)
     enable_literature_review_node: bool = True
     enable_tool_calling_generation: bool = False

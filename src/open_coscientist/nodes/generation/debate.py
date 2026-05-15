@@ -119,6 +119,15 @@ async def _run_single_debate(
             literature_grounding = hyp_data.get("literature_grounding")
             experiment = hyp_data.get("experiment")
 
+            # Auto-fill literature_grounding when the LLM omits it (common in
+            # no-literature / debate-only mode).  The coordinator's
+            # _apply_degraded_mode_fallback will overwrite this for degraded-mode
+            # runs, but setting a safe default here prevents None propagation.
+            if not literature_grounding:
+                literature_grounding = (
+                    "This hypothesis is formulated without access to a literature review."
+                )
+
             citation_map = resolve_citation_keys(literature_grounding, ref_idx.sources)
 
             hypothesis = Hypothesis(

@@ -207,6 +207,9 @@ async def draft_hypotheses(
     # additional cleanup - remove leading/trailing whitespace and newlines
     response_text = response_text.strip().strip("\n").strip()
 
+    # ── Universal JSON sanitization (permanent fix for LLM quirks) ──
+    response_text = response_text.replace("\\'", "'")  # \' is not valid JSON
+
     # use attempt_json_repair for robust parsing
     response_data, was_repaired = attempt_json_repair(response_text, allow_major_repairs=True)
 
@@ -218,6 +221,31 @@ async def draft_hypotheses(
     if was_repaired:
         logger.warning("Draft JSON response required major repairs (possible truncation)")
 
+    # Handle various response formats from the LLM:
+    # 1. {"drafts": [...]}  — expected format
+    # 2. {"hypotheses": [...]}  — LLM used wrong key
+    # 3. [{"hypothesis": ...}]  — bare array (wrapped by attempt_json_repair into {"hypotheses": [...]})
+    # 4. {"drafts": "[...]"}  — string-encoded array
     drafts = response_data.get("drafts", [])
+    if not drafts:
+        # Try "hypotheses" key (common LLM mistake)
+        drafts = response_data.get("hypotheses", [])
+    if not drafts:
+        # Last resort: if response_data itself has hypothesis-like keys, wrap as single draft
+        if "hypothesis" in response_data or "text" in response_data:
+            drafts = [response_data]
+
+    # Handle string-encoded arrays
+    if isinstance(drafts, str):
+        try:
+            import json as _json
+            parsed_drafts = _json.loads(drafts)
+            if isinstance(parsed_drafts, list):
+                logger.info("Parsed string-encoded drafts array")
+                drafts = parsed_drafts
+        except (ValueError, TypeError):
+            pass
+
     logger.info(f"Parsed {len(drafts)} draft hypotheses")
     return drafts
+

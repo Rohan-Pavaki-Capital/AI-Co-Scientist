@@ -411,6 +411,8 @@ async def validate_hypotheses(
             logger.info(f"Batch {batch_label}: {total_calls} tool calls ({calls_summary})")
 
         response_text = _extract_response_json(final_response)
+        # ── Universal JSON sanitization (permanent fix for LLM quirks) ──
+        response_text = response_text.replace("\\'", "'")
         response_data, was_repaired = attempt_json_repair(response_text, allow_major_repairs=True)
 
         if response_data is None:
